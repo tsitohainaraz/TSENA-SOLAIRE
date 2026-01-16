@@ -1,15 +1,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
 import json
 import base64
-from io import BytesIO
-import pdfkit
 import warnings
+from datetime import datetime, timedelta
+from io import BytesIO
 warnings.filterwarnings('ignore')
 
 # Configuration de la page
@@ -342,8 +338,63 @@ def calculate_optimal_config(energie_totale, puissance_max, params):
         'capacite_batterie_wh': capacite_necessaire_wh
     }
 
-def generate_pdf_devis(devis_data):
-    """Génère un PDF du devis"""
+def create_simple_chart(data, chart_type="bar"):
+    """Crée un graphique simple sans plotly"""
+    if chart_type == "bar":
+        # Créer un graphique à barres simple avec HTML/CSS
+        max_value = max(data['values']) if data['values'] else 1
+        bars_html = ""
+        for label, value in zip(data['labels'], data['values']):
+            width = (value / max_value) * 100
+            bars_html += f"""
+            <div style="margin: 10px 0;">
+                <div style="font-size: 0.9em; margin-bottom: 5px;">{label}</div>
+                <div style="background: linear-gradient(90deg, #00843D, #00A86B); 
+                          height: 25px; width: {width}%; border-radius: 5px; 
+                          display: flex; align-items: center; padding-left: 10px; color: white; font-weight: bold;">
+                    {value:,.0f}
+                </div>
+            </div>
+            """
+        
+        return f"""
+        <div style="background: white; padding: 20px; border-radius: 10px; border: 2px solid #e0e0e0;">
+            <h4 style="color: #00843D; margin-top: 0;">{data.get('title', 'Graphique')}</h4>
+            {bars_html}
+        </div>
+        """
+    elif chart_type == "pie":
+        # Créer un graphique circulaire simple
+        total = sum(data['values'])
+        if total == 0:
+            return "<div>Aucune donnée</div>"
+        
+        colors = ['#00843D', '#FC3D32', '#FFD700', '#87CEEB', '#8B4513']
+        pie_html = ""
+        start_angle = 0
+        
+        for i, (label, value) in enumerate(zip(data['labels'], data['values'])):
+            percentage = (value / total) * 100
+            angle = (value / total) * 360
+            
+            pie_html += f"""
+            <div style="margin: 10px 0; padding: 5px; border-left: 5px solid {colors[i % len(colors)]};">
+                <div style="display: flex; justify-content: space-between;">
+                    <span>{label}</span>
+                    <span style="font-weight: bold;">{percentage:.1f}% ({format_prix(value)})</span>
+                </div>
+            </div>
+            """
+        
+        return f"""
+        <div style="background: white; padding: 20px; border-radius: 10px; border: 2px solid #e0e0e0;">
+            <h4 style="color: #00843D; margin-top: 0;">{data.get('title', 'Répartition')}</h4>
+            {pie_html}
+        </div>
+        """
+
+def generate_html_devis(devis_data):
+    """Génère un HTML du devis"""
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -404,6 +455,7 @@ def generate_pdf_devis(devis_data):
             <p>Sous-total: {format_prix(total)}</p>
             <p>Installation: {format_prix(devis_data.get('installation', 0))}</p>
             <p>Accessoires: {format_prix(devis_data.get('accessoires', 0))}</p>
+            <p>Transport: {format_prix(devis_data.get('transport', 0))}</p>
             <p>TVA (20%): {format_prix(devis_data.get('tva', 0))}</p>
             <p class="total">TOTAL TTC: {format_prix(devis_data.get('total_ttc', 0))}</p>
         </div>
@@ -417,14 +469,7 @@ def generate_pdf_devis(devis_data):
     </html>
     """
     
-    try:
-        # Utiliser pdfkit si disponible, sinon retourner HTML
-        import pdfkit
-        pdf = pdfkit.from_string(html_content, False)
-        return pdf
-    except:
-        # Retourner le HTML si pdfkit n'est pas disponible
-        return html_content.encode()
+    return html_content
 
 # Interface principale
 st.markdown('<h1 class="main-title">☀️ TSENA SOLAIRE MALAGASY</h1>', unsafe_allow_html=True)
@@ -485,7 +530,7 @@ with tabs[0]:
             st.metric("🌿 CO₂ évité (tonnes)", "850+")
     
     with col2:
-        # Image/Illustration
+        # Couverture nationale
         st.markdown("### 🌍 Couverture nationale")
         regions = {
             "Analamanga": 35,
@@ -495,13 +540,14 @@ with tabs[0]:
             "Boeny": 10
         }
         
-        fig = px.pie(
-            values=list(regions.values()),
-            names=list(regions.keys()),
-            title="Installations par région",
-            color_discrete_sequence=['#00843D', '#00A86B', '#FC3D32', '#FF6B6B', '#FFD700']
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        # Créer un graphique simple
+        chart_data = {
+            'labels': list(regions.keys()),
+            'values': list(regions.values()),
+            'title': "Installations par région"
+        }
+        
+        st.markdown(create_simple_chart(chart_data, "bar"), unsafe_allow_html=True)
         
         # Témoignage
         st.markdown("""
@@ -576,16 +622,14 @@ with tabs[1]:
         total_energie = df_conso["Énergie (Wh/jour)"].sum()
         total_puissance = (df_conso["Puissance (W)"] * df_conso["Quantité"]).sum()
         
-        # Graphique
-        fig = px.bar(
-            df_conso,
-            x="Équipement",
-            y="Énergie (Wh/jour)",
-            color="Équipement",
-            title=f"Consommation totale: {total_energie:,.0f} Wh/jour",
-            color_discrete_sequence=px.colors.sequential.Viridis
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        # Graphique simple
+        chart_data = {
+            'labels': df_conso["Équipement"].tolist(),
+            'values': df_conso["Énergie (Wh/jour)"].tolist(),
+            'title': f"Consommation totale: {total_energie:,.0f} Wh/jour"
+        }
+        
+        st.markdown(create_simple_chart(chart_data, "bar"), unsafe_allow_html=True)
         
         # Métriques
         col1, col2, col3 = st.columns(3)
@@ -666,11 +710,11 @@ with tabs[2]:
                 
                 # Bouton d'ajout rapide
                 if st.button(f"➕ Ajouter au devis", key=f"add_{idx}"):
-                    if 'panneaux' in produit.values():
+                    if 'panneaux' in str(produit):
                         st.session_state.selected_config['panneaux'] = produit
-                    elif 'batterie' in produit.values():
+                    elif 'Batterie' in produit['nom']:
                         st.session_state.selected_config['batterie'] = produit
-                    elif 'convertisseur' in produit.values():
+                    elif 'Onduleur' in produit['nom'] or 'Inverter' in produit['nom']:
                         st.session_state.selected_config['convertisseur'] = produit
                     st.success(f"{produit['nom']} ajouté à la configuration!")
                 
@@ -734,11 +778,14 @@ with tabs[3]:
                 if 'convertisseur' in config:
                     st.metric("🔌 Convertisseur", f"{config['convertisseur']['puissance']:,}W")
             with col4:
-                st.metric("💰 Budget estimé", format_prix(
-                    config.get('panneaux', {}).get('prix', 0) * config.get('n_panneaux', 0) +
-                    config.get('batterie', {}).get('prix', 0) * config.get('n_batteries', 0) +
-                    config.get('convertisseur', {}).get('prix', 0)
-                ))
+                prix_total = 0
+                if 'panneaux' in config:
+                    prix_total += config['panneaux']['prix'] * config['n_panneaux']
+                if 'batterie' in config:
+                    prix_total += config['batterie']['prix'] * config['n_batteries']
+                if 'convertisseur' in config:
+                    prix_total += config['convertisseur']['prix']
+                st.metric("💰 Budget estimé", format_prix(prix_total))
             
             # Détails des composants
             st.markdown("#### 📋 Détail des composants")
@@ -779,14 +826,13 @@ with tabs[3]:
                 cout_batteries = config['batterie']['prix'] * config['n_batteries']
                 cout_convertisseur = config['convertisseur']['prix']
                 
-                fig = go.Figure(data=[go.Pie(
-                    labels=['Panneaux', 'Batteries', 'Convertisseur'],
-                    values=[cout_panneaux, cout_batteries, cout_convertisseur],
-                    hole=.3,
-                    marker_colors=['#00843D', '#FC3D32', '#FFD700']
-                )])
-                fig.update_layout(title="Répartition des coûts")
-                st.plotly_chart(fig, use_container_width=True)
+                pie_data = {
+                    'labels': ['Panneaux', 'Batteries', 'Convertisseur'],
+                    'values': [cout_panneaux, cout_batteries, cout_convertisseur],
+                    'title': "Répartition des coûts"
+                }
+                
+                st.markdown(create_simple_chart(pie_data, "pie"), unsafe_allow_html=True)
 
 # Tab 5: Devis
 with tabs[4]:
@@ -877,27 +923,19 @@ with tabs[4]:
                 # Récapitulatif financier
                 st.markdown("#### 💰 Récapitulatif")
                 
-                fig = go.Figure(go.Waterfall(
-                    name="Devis",
-                    orientation="v",
-                    measure=["relative", "relative", "relative", "relative", "relative", "relative", "total"],
-                    x=["Panneaux", "Batteries", "Convertisseur", "Installation", "Accessoires", "Transport", "Total HT"],
-                    textposition="outside",
-                    text=[format_prix(cout_panneaux), format_prix(cout_batteries), 
-                          format_prix(cout_convertisseur), format_prix(cout_installation),
-                          format_prix(cout_accessoires), format_prix(cout_transport), ""],
-                    y=[cout_panneaux, cout_batteries, cout_convertisseur, 
-                       cout_installation, cout_accessoires, cout_transport, total_ttc],
-                    connector={"line": {"color": "rgb(63, 63, 63)"}},
-                ))
+                # Graphique waterfall simple
+                waterfall_data = {
+                    'labels': ['Panneaux', 'Batteries', 'Convertisseur', 'Installation', 'Accessoires', 'Transport', 'TVA', 'Total'],
+                    'values': [cout_panneaux, cout_batteries, cout_convertisseur, 
+                              cout_installation, cout_accessoires, cout_transport, tva, total_ttc]
+                }
                 
-                fig.update_layout(
-                    title="Évolution du coût total",
-                    showlegend=False,
-                    height=400
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
+                st.markdown(create_simple_chart({
+                    'labels': ['Panneaux', 'Batteries', 'Convertisseur', 'Installation', 'Accessoires', 'Transport', 'TVA'],
+                    'values': [cout_panneaux, cout_batteries, cout_convertisseur, 
+                              cout_installation, cout_accessoires, cout_transport, tva],
+                    'title': "Évolution du coût total"
+                }, "bar"), unsafe_allow_html=True)
             
             with col2:
                 st.markdown("### 🧾 Résumé")
@@ -939,15 +977,12 @@ with tabs[4]:
                 </a>
                 """, unsafe_allow_html=True)
                 
-                # Export PDF
-                if st.button("📄 Exporter le devis (PDF)", use_container_width=True):
-                    pdf_content = generate_pdf_devis(devis_data)
+                # Export HTML
+                if st.button("📄 Exporter le devis (HTML)", use_container_width=True):
+                    html_content = generate_html_devis(devis_data)
                     
-                    if isinstance(pdf_content, bytes):
-                        b64 = base64.b64encode(pdf_content).decode()
-                        href = f'<a href="data:application/pdf;base64,{b64}" download="devis_tsena_solaire_{devis_data["reference"]}.pdf">📥 Télécharger le PDF</a>'
-                    else:
-                        href = f'<a href="data:text/html;base64,{base64.b64encode(pdf_content).decode()}" download="devis_tsena_solaire_{devis_data["reference"]}.html">📥 Télécharger le HTML</a>'
+                    b64 = base64.b64encode(html_content.encode()).decode()
+                    href = f'<a href="data:text/html;base64,{b64}" download="devis_tsena_solaire_{devis_data["reference"]}.html">📥 Télécharger le HTML</a>'
                     
                     st.markdown(href, unsafe_allow_html=True)
                     st.success("Devis généré avec succès!")
