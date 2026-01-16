@@ -1,149 +1,228 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import json
+import base64
+from io import BytesIO
+import pdfkit
+import warnings
+warnings.filterwarnings('ignore')
 
+# Configuration de la page
 st.set_page_config(
-    page_title="Tsena Solaire Malagasy - Devis Automatique",
-    page_icon="☀️",
+    page_title="Tsena Solaire Malagasy",
+    page_icon="🌍",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# Configuration CSS avancée
+# CSS personnalisé pour mobile et design malgache
 st.markdown("""
 <style>
+    /* Style général avec couleurs de Madagascar */
     :root {
-        --primary: #FF6B00;
-        --secondary: #2E86C1;
-        --accent: #28B463;
-        --light: #F8F9F9;
-        --dark: #2C3E50;
+        --vert-malgache: #00843D;
+        --rouge-malgache: #FC3D32;
+        --blanc-malgache: #FFFFFF;
+        --jaune-soleil: #FFD700;
+        --terre-malgache: #8B4513;
+        --ciel-malgache: #87CEEB;
     }
     
-    .main-header {
-        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-        color: white;
+    /* Design responsive pour mobile */
+    @media only screen and (max-width: 768px) {
+        .main-title { font-size: 1.8rem !important; }
+        .section-title { font-size: 1.3rem !important; }
+        .metric-card { padding: 10px !important; margin: 5px 0 !important; }
+        .stButton > button { font-size: 0.9rem !important; padding: 8px 15px !important; }
+        .product-grid { grid-template-columns: repeat(1, 1fr) !important; }
+    }
+    
+    /* Style principal */
+    .main-title {
+        background: linear-gradient(90deg, var(--vert-malgache), var(--rouge-malgache));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         text-align: center;
-        font-size: 2.8em;
-        font-weight: 800;
-        padding: 20px;
-        border-radius: 15px;
+        font-size: 2.5rem;
+        font-weight: 900;
+        margin-bottom: 10px;
+        font-family: 'Arial', sans-serif;
+    }
+    
+    .sub-title {
+        color: var(--terre-malgache);
+        text-align: center;
+        font-size: 1.2rem;
+        font-weight: 600;
         margin-bottom: 30px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        font-style: italic;
     }
     
-    .section-header {
-        background-color: var(--light);
-        color: var(--dark);
-        padding: 15px;
-        border-radius: 10px;
-        border-left: 6px solid var(--primary);
-        margin: 20px 0;
-        font-size: 1.6em;
+    /* Sections */
+    .section-title {
+        background-color: var(--vert-malgache);
+        color: white;
+        padding: 12px 20px;
+        border-radius: 10px 10px 0 0;
+        font-size: 1.5rem;
         font-weight: 700;
+        margin-top: 30px;
+        position: relative;
     }
     
+    .section-title:after {
+        content: "🌍";
+        position: absolute;
+        right: 20px;
+    }
+    
+    /* Cartes de produits */
     .product-card {
-        background: white;
-        border-radius: 10px;
-        padding: 15px;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border-radius: 15px;
+        padding: 20px;
         margin: 10px 0;
-        border: 2px solid #e0e0e0;
+        border: 2px solid var(--vert-malgache);
         transition: all 0.3s ease;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 15px rgba(0, 132, 61, 0.1);
     }
     
     .product-card:hover {
         transform: translateY(-5px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        border-color: var(--primary);
+        box-shadow: 0 8px 25px rgba(0, 132, 61, 0.2);
+        border-color: var(--rouge-malgache);
     }
     
     .price-tag {
-        background: linear-gradient(135deg, var(--accent) 0%, #1D8348 100%);
+        background: linear-gradient(135deg, var(--rouge-malgache), #FF6B6B);
         color: white;
         padding: 8px 15px;
         border-radius: 20px;
         font-weight: bold;
-        font-size: 1.2em;
         display: inline-block;
         margin: 5px 0;
+        font-size: 1.1em;
     }
     
-    .config-box {
-        background: linear-gradient(135deg, #E8F4FD 0%, #F0F7FF 100%);
-        border-radius: 10px;
-        padding: 20px;
-        border: 2px solid var(--secondary);
-        margin: 15px 0;
-    }
-    
-    .result-card {
-        background: linear-gradient(135deg, #fff8e1 0%, #fff3e0 100%);
-        border-radius: 15px;
-        padding: 25px;
-        border: 3px solid var(--primary);
-        margin: 20px 0;
-        box-shadow: 0 4px 20px rgba(255,107,0,0.15);
-    }
-    
+    /* Boutons */
     .stButton > button {
-        background: linear-gradient(135deg, var(--primary) 0%, #E65B00 100%);
+        background: linear-gradient(135deg, var(--vert-malgache), #00A86B);
         color: white;
         font-weight: bold;
-        padding: 12px 28px;
-        border-radius: 8px;
+        padding: 12px 25px;
+        border-radius: 25px;
         border: none;
-        font-size: 1.1em;
+        font-size: 1em;
         transition: all 0.3s ease;
         width: 100%;
+        box-shadow: 0 4px 15px rgba(0, 132, 61, 0.3);
     }
     
     .stButton > button:hover {
         transform: scale(1.03);
-        box-shadow: 0 5px 15px rgba(255,107,0,0.3);
+        box-shadow: 0 6px 20px rgba(0, 132, 61, 0.4);
+        background: linear-gradient(135deg, #00A86B, var(--vert-malgache));
     }
     
-    .metric-box {
-        background: white;
+    /* Bouton WhatsApp spécifique */
+    .whatsapp-btn {
+        background: linear-gradient(135deg, #25D366, #128C7E) !important;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    
+    /* Onglets */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: #f0f2f6;
+        padding: 10px;
         border-radius: 10px;
-        padding: 15px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px 8px 0 0;
+        padding: 10px 20px;
+        font-weight: 600;
+    }
+    
+    /* Cartes métriques */
+    .metric-card {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
         text-align: center;
-        border: 2px solid var(--secondary);
-        margin: 10px 0;
+        border: 2px solid var(--ciel-malgache);
+        margin: 10px;
+        box-shadow: 0 4px 12px rgba(135, 206, 235, 0.2);
     }
     
     .metric-value {
-        font-size: 1.8em;
-        font-weight: bold;
-        color: var(--primary);
-        margin: 5px 0;
+        font-size: 2rem;
+        font-weight: 800;
+        color: var(--vert-malgache);
+        margin: 10px 0;
     }
     
     .metric-label {
-        font-size: 0.9em;
-        color: var(--dark);
+        font-size: 0.9rem;
+        color: var(--terre-malgache);
         opacity: 0.8;
     }
     
-    .tab-container {
-        background: var(--light);
-        border-radius: 10px;
-        padding: 5px;
-        margin: 15px 0;
+    /* Grille de produits */
+    .product-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+        margin: 20px 0;
     }
     
+    /* Footer */
     .footer {
         text-align: center;
-        color: var(--dark);
+        background: linear-gradient(90deg, var(--vert-malgache), var(--rouge-malgache));
+        color: white;
         padding: 20px;
         margin-top: 40px;
-        border-top: 3px solid var(--primary);
-        font-size: 0.9em;
-        opacity: 0.8;
+        border-radius: 15px 15px 0 0;
+    }
+    
+    /* Badges */
+    .eco-badge {
+        background-color: var(--vert-malgache);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 0.8em;
+        display: inline-block;
+        margin: 5px 5px 5px 0;
+    }
+    
+    /* Responsive */
+    .mobile-hidden {
+        display: block;
+    }
+    
+    @media only screen and (max-width: 768px) {
+        .mobile-hidden {
+            display: none;
+        }
+    }
+    
+    /* Images décoratives */
+    .deco-leaf {
+        color: var(--vert-malgache);
+        font-size: 1.2em;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -151,195 +230,56 @@ st.markdown("""
 # Initialisation des données de session
 if 'materiels' not in st.session_state:
     st.session_state.materiels = []
-if 'selected_components' not in st.session_state:
-    st.session_state.selected_components = {}
-if 'devis_data' not in st.session_state:
-    st.session_state.devis_data = {}
+if 'selected_config' not in st.session_state:
+    st.session_state.selected_config = {}
+if 'devis' not in st.session_state:
+    st.session_state.devis = {}
 
-# Base de données des produits
-PRODUCT_DATABASE = {
+# Base de données complète des produits
+PRODUCTS_DB = {
     "convertisseurs": [
-        {
-            "id": 1,
-            "nom": "24V / 3KW Inverter",
-            "puissance": 3000,
-            "tension": 24,
-            "prix": 1400000,
-            "description": "Puissance 3000W · Sortie 230Vac monophasé · Batterie 24Vdc · MPPT 30-90Vdc 40A · 1 MPPT · Usage intérieur IP20",
-            "marque": "SRNE",
-            "type": "Hybride"
-        },
-        {
-            "id": 2,
-            "nom": "48V / 5KW Inverter",
-            "puissance": 5000,
-            "tension": 48,
-            "prix": 2400000,
-            "description": "Puissance 5000W · Sortie 230Vac mono/tri en parallèle · Batterie 48Vdc · MPPT 120-450Vdc 22A · Jusqu'à 6 unités en parallèle · IP20",
-            "marque": "HAISIC",
-            "type": "Hybride"
-        },
-        {
-            "id": 3,
-            "nom": "48V / 10KW Inverter",
-            "puissance": 10000,
-            "tension": 48,
-            "prix": 6000000,
-            "description": "Puissance 10 000W · Sortie 230Vac mono/tri · Batterie 48Vdc · 2 MPPT (22A+22A) · Parallèle jusqu'à 6 unités · IP20",
-            "marque": "HAISIC",
-            "type": "Hybride"
-        },
-        {
-            "id": 4,
-            "nom": "48V / 12KW Inverter H3",
-            "puissance": 12000,
-            "tension": 48,
-            "prix": 6600000,
-            "description": "Puissance 12 000W · Sortie 230Vac mono/tri · Batterie 48Vdc · 2 MPPT · Entrée PV max 9kW+9kW · IP20",
-            "marque": "SRNE",
-            "type": "Hybride"
-        },
-        {
-            "id": 5,
-            "nom": "48V / 6KW Inverter IP65",
-            "puissance": 6000,
-            "tension": 48,
-            "prix": 3500000,
-            "description": "Puissance 6000W · Sortie 230Vac mono/tri · Batterie 48Vdc · MPPT 120-450Vdc · Parallèle jusqu'à 6 unités · IP65",
-            "marque": "HONG FENG",
-            "type": "Hybride"
-        },
-        {
-            "id": 6,
-            "nom": "48V / 12KW Inverter IP65",
-            "puissance": 12000,
-            "tension": 48,
-            "prix": 8700000,
-            "description": "Puissance 12 000W · Sortie 230Vac mono/tri · Batterie 48Vdc · 2 MPPT · Entrée PV 5.5kW+5.5kW · IP65",
-            "marque": "SRNE",
-            "type": "Hybride"
-        }
+        {"id": 1, "nom": "Onduleur 24V/3KW", "puissance": 3000, "tension": 24, "prix": 1400000, "marque": "SRNE", "type": "Hybride", "mppt": "1x40A", "efficiency": "93%"},
+        {"id": 2, "nom": "Onduleur 48V/5KW", "puissance": 5000, "tension": 48, "prix": 2400000, "marque": "HAISIC", "type": "Hybride", "mppt": "1x22A", "efficiency": "95%"},
+        {"id": 3, "nom": "Onduleur 48V/10KW", "puissance": 10000, "tension": 48, "prix": 6000000, "marque": "HAISIC", "type": "Hybride", "mppt": "2x22A", "efficiency": "96%"},
+        {"id": 4, "nom": "Onduleur 48V/12KW H3", "puissance": 12000, "tension": 48, "prix": 6600000, "marque": "SRNE", "type": "Hybride", "mppt": "2xMPPT", "efficiency": "96%"},
+        {"id": 5, "nom": "Onduleur 48V/6KW IP65", "puissance": 6000, "tension": 48, "prix": 3500000, "marque": "HONG FENG", "type": "Hybride", "mppt": "1xMPPT", "efficiency": "94%"},
+        {"id": 6, "nom": "Onduleur 48V/12KW IP65", "puissance": 12000, "tension": 48, "prix": 8700000, "marque": "SRNE", "type": "Hybride", "mppt": "2xMPPT", "efficiency": "96%"}
     ],
     
     "batteries": [
-        {
-            "id": 7,
-            "nom": "Batterie Lithium 25.6V / 100Ah",
-            "tension": 25.6,
-            "capacite": 100,
-            "energie": 2.56,
-            "prix": 2600000,
-            "description": "Tension 25.6V · Capacité 100Ah · Énergie 2.56kWh · Courant charge max 100A · Durée de vie 6000 cycles",
-            "marque": "HAISIC",
-            "type": "Lithium LFP"
-        },
-        {
-            "id": 8,
-            "nom": "Batterie Lithium 51.2V / 100Ah",
-            "tension": 51.2,
-            "capacite": 100,
-            "energie": 5.12,
-            "prix": 5000000,
-            "description": "Tension 51.2V · Capacité 100Ah · Énergie 5.12kWh · Courant charge max 100A · 6000 cycles",
-            "marque": "SRNE",
-            "type": "Lithium LFP"
-        },
-        {
-            "id": 9,
-            "nom": "Batterie Lithium 51.2V / 200Ah",
-            "tension": 51.2,
-            "capacite": 200,
-            "energie": 10.24,
-            "prix": 9000000,
-            "description": "Tension 51.2V · Capacité 200Ah · Énergie 10.24kWh · Courant charge max 200A · 6000 cycles",
-            "marque": "HAISIC",
-            "type": "Lithium LFP"
-        },
-        {
-            "id": 10,
-            "nom": "Batterie Lithium 51.2V / 316Ah",
-            "tension": 51.2,
-            "capacite": 316,
-            "energie": 16.49,
-            "prix": 11500000,
-            "description": "Tension 51.2V · Capacité 316Ah · Énergie 16.49kWh · Courant charge max 300A · 6000 cycles",
-            "marque": "CHINA ESS",
-            "type": "Lithium LFP"
-        }
+        {"id": 7, "nom": "Batterie Lithium 25.6V/100Ah", "tension": 25.6, "capacite": 100, "energie": 2.56, "prix": 2600000, "marque": "HAISIC", "cycles": 6000, "poids": "25kg"},
+        {"id": 8, "nom": "Batterie Lithium 51.2V/100Ah", "tension": 51.2, "capacite": 100, "energie": 5.12, "prix": 5000000, "marque": "SRNE", "cycles": 6000, "poids": "45kg"},
+        {"id": 9, "nom": "Batterie Lithium 51.2V/200Ah", "tension": 51.2, "capacite": 200, "energie": 10.24, "prix": 9000000, "marque": "HAISIC", "cycles": 6000, "poids": "85kg"},
+        {"id": 10, "nom": "Batterie Lithium 51.2V/316Ah", "tension": 51.2, "capacite": 316, "energie": 16.49, "prix": 11500000, "marque": "CHINA ESS", "cycles": 6000, "poids": "120kg"}
     ],
     
     "panneaux": [
-        {
-            "id": "P110",
-            "puissance": 110,
-            "prix": 130000,
-            "description": "Panneau solaire monocristallin 110W",
-            "marque": "Jinko Solar"
-        },
-        {
-            "id": "P210",
-            "puissance": 210,
-            "prix": 180000,
-            "description": "Panneau solaire monocristallin 210W",
-            "marque": "Jinko Solar"
-        },
-        {
-            "id": "P550",
-            "puissance": 550,
-            "prix": 500000,
-            "description": "Panneau solaire monocristallin 550W",
-            "marque": "Canadian Solar"
-        },
-        {
-            "id": "P580",
-            "puissance": 580,
-            "prix": 600000,
-            "description": "Panneau solaire monocristallin 580W",
-            "marque": "Canadian Solar"
-        },
-        {
-            "id": "P60",
-            "puissance": 60,
-            "prix": 80000,
-            "description": "Panneau solaire polycristallin 60W",
-            "marque": "Trina Solar"
-        },
-        {
-            "id": "P80",
-            "puissance": 80,
-            "prix": 100000,
-            "description": "Panneau solaire polycristallin 80W",
-            "marque": "Trina Solar"
-        }
+        {"id": "P110", "puissance": 110, "prix": 130000, "type": "Monocristallin", "efficiency": "21%", "dimensions": "1480×670×35mm"},
+        {"id": "P210", "puissance": 210, "prix": 180000, "type": "Monocristallin", "efficiency": "21.5%", "dimensions": "1650×992×35mm"},
+        {"id": "P550", "puissance": 550, "prix": 500000, "type": "Monocristallin", "efficiency": "22.1%", "dimensions": "2278×1134×35mm"},
+        {"id": "P580", "puissance": 580, "prix": 600000, "type": "Monocristallin", "efficiency": "22.3%", "dimensions": "2278×1134×35mm"},
+        {"id": "P60", "puissance": 60, "prix": 80000, "type": "Polycristallin", "efficiency": "18%", "dimensions": "670×540×30mm"},
+        {"id": "P80", "puissance": 80, "prix": 100000, "type": "Polycristallin", "efficiency": "18.5%", "dimensions": "810×540×30mm"}
     ],
     
     "pompes": [
-        {"id": 13, "nom": "3DSP4/95-D18/750W", "puissance": 750, "prix": 720000, "type": "DC"},
-        {"id": 14, "nom": "3DSP4/165-D110/1500", "puissance": 1500, "prix": 870000, "type": "DC"},
-        {"id": 15, "nom": "3DSP4/125-D110/1100W", "puissance": 1100, "prix": 830000, "type": "DC"},
-        {"id": 16, "nom": "4DSP6/95-D110/1100W", "puissance": 1100, "prix": 840000, "type": "DC"},
-        {"id": 17, "nom": "4DSP6/135-D110/1500W", "puissance": 1500, "prix": 850000, "type": "DC"},
-        {"id": 18, "nom": "3DSP4/95-A220/D110V-750W", "puissance": 750, "prix": 980000, "type": "AC/DC"},
-        {"id": 19, "nom": "3DSP4/125-A220/D110V-1100W", "puissance": 1100, "prix": 1030000, "type": "AC/DC"},
-        {"id": 20, "nom": "3DSP5-140-A220/D200-1500", "puissance": 1500, "prix": 1050000, "type": "AC/DC"},
-        {"id": 21, "nom": "4DSP6/175-A220/D300-2200W", "puissance": 2200, "prix": 1140000, "type": "AC"},
-        {"id": 22, "nom": "4SPM318-1.1", "puissance": 1100, "prix": 520000, "type": "AC Surface"},
-        {"id": 23, "nom": "PM60-400Z", "puissance": 400, "prix": 260000, "type": "AC"},
-        {"id": 24, "nom": "PM70-600Z", "puissance": 600, "prix": 330000, "type": "AC"},
-        {"id": 25, "nom": "PM80-800Z", "puissance": 800, "prix": 340000, "type": "AC"},
-        {"id": 26, "nom": "PM90-1500Z", "puissance": 1500, "prix": 420000, "type": "AC"}
-    ],
-    
-    "regulateurs": [
-        {"id": 27, "nom": "PWM 12/24V -- 20A", "courant": 20, "prix": 80000, "type": "PWM"},
-        {"id": 28, "nom": "PWM 12/24V -- 60A", "courant": 60, "prix": 190000, "type": "PWM"},
-        {"id": 29, "nom": "MPPT 12/24V -- 20A", "courant": 20, "prix": 240000, "type": "MPPT"},
-        {"id": 30, "nom": "MPPT 12/24/48V -- 60A", "courant": 60, "prix": 650000, "type": "MPPT"}
+        {"id": 13, "nom": "Pompe DC 750W", "puissance": 750, "prix": 720000, "type": "DC", "debit": "95m³/h", "hauteur": "18m"},
+        {"id": 14, "nom": "Pompe DC 1500W", "puissance": 1500, "prix": 870000, "type": "DC", "debit": "165m³/h", "hauteur": "110m"},
+        {"id": 15, "nom": "Pompe DC 1100W", "puissance": 1100, "prix": 830000, "type": "DC", "debit": "125m³/h", "hauteur": "110m"},
+        {"id": 16, "nom": "Pompe DC 1100W 4DSP6", "puissance": 1100, "prix": 840000, "type": "DC", "debit": "95m³/h", "hauteur": "110m"},
+        {"id": 17, "nom": "Pompe DC 1500W 4DSP6", "puissance": 1500, "prix": 850000, "type": "DC", "debit": "135m³/h", "hauteur": "110m"}
     ],
     
     "eclairage": [
-        {"id": 11, "nom": "BL-3000 Solar Street Light", "prix": 200000, "description": "Lampadaire solaire autonome · Panneau intégré · Usage extérieur"},
-        {"id": 12, "nom": "YL-30P Solar Street Light", "prix": 270000, "description": "Lampadaire solaire 250W · Panneau solaire inclus"}
+        {"id": 11, "nom": "Lampadaire Solaire BL-3000", "prix": 200000, "puissance": "30W LED", "autonomie": "12h", "detection": "Mouvement"},
+        {"id": 12, "nom": "Lampadaire Solaire YL-30P", "prix": 270000, "puissance": "250W LED", "autonomie": "10h", "detection": "Mouvement"}
+    ],
+    
+    "regulateurs": [
+        {"id": 27, "nom": "Régulateur PWM 20A", "courant": 20, "prix": 80000, "type": "PWM", "tension": "12/24V"},
+        {"id": 28, "nom": "Régulateur PWM 60A", "courant": 60, "prix": 190000, "type": "PWM", "tension": "12/24V"},
+        {"id": 29, "nom": "Régulateur MPPT 20A", "courant": 20, "prix": 240000, "type": "MPPT", "tension": "12/24V"},
+        {"id": 30, "nom": "Régulateur MPPT 60A", "courant": 60, "prix": 650000, "type": "MPPT", "tension": "12/24/48V"}
     ]
 }
 
@@ -347,670 +287,701 @@ PRODUCT_DATABASE = {
 def format_prix(prix):
     return f"{prix:,.0f} Ar".replace(",", " ")
 
-def calculate_system_configuration(consommation_jour, consommation_nuit, params):
-    """Calcule la configuration du système solaire"""
-    # Calculs de base
-    energie_totale = consommation_jour + consommation_nuit
-    energie_avec_rendement = energie_totale / params['rendement']
+def calculate_optimal_config(energie_totale, puissance_max, params):
+    """Calcule la configuration optimale automatique"""
+    # Calcul énergie nécessaire avec pertes
+    energie_necessaire = energie_totale / params['rendement']
     
-    # Calcul nombre de panneaux
-    energie_panneau_jour = params['puissance_panneau'] * params['heures_ensoleillement']
-    n_panneaux = max(1, np.ceil(energie_avec_rendement / energie_panneau_jour))
+    # Sélection optimale des panneaux
+    panneau_selection = None
+    n_panneaux_optimal = float('inf')
     
-    # Calcul capacité batterie nécessaire
-    capacite_necessaire_wh = (consommation_nuit * params['autonomie']) / params['profondeur_decharge']
+    for panneau in PRODUCTS_DB['panneaux']:
+        energie_panneau_jour = panneau['puissance'] * params['heures_soleil']
+        n_panneaux = max(1, np.ceil(energie_necessaire / energie_panneau_jour))
+        
+        if n_panneaux < n_panneaux_optimal:
+            n_panneaux_optimal = n_panneaux
+            panneau_selection = panneau
     
     # Sélection de la batterie
-    batterie_selectionnee = None
-    for batterie in PRODUCT_DATABASE['batteries']:
-        capacite_wh = batterie['energie'] * 1000  # Convertir kWh en Wh
-        if capacite_wh >= capacite_necessaire_wh:
-            batterie_selectionnee = batterie
+    capacite_necessaire_wh = (energie_totale * params['autonomie']) / params['profondeur_decharge']
+    batterie_selection = None
+    
+    for batterie in PRODUCTS_DB['batteries']:
+        capacite_wh = batterie['energie'] * 1000
+        if capacite_wh >= capacite_necessaire_wh * 0.8:  # 80% de la capacité nécessaire
+            batterie_selection = batterie
             break
     
-    # Si aucune batterie n'est suffisante, prendre la plus grande
-    if not batterie_selectionnee:
-        batterie_selectionnee = max(PRODUCT_DATABASE['batteries'], key=lambda x: x['energie'])
+    if not batterie_selection:
+        batterie_selection = max(PRODUCTS_DB['batteries'], key=lambda x: x['energie'])
     
-    # Calcul nombre de batteries
-    n_batteries = max(1, np.ceil(capacite_necessaire_wh / (batterie_selectionnee['energie'] * 1000)))
+    n_batteries = max(1, np.ceil(capacite_necessaire_wh / (batterie_selection['energie'] * 1000)))
     
     # Sélection du convertisseur
-    puissance_maximale = params['puissance_max'] * params['marge_securite']
-    convertisseur_selectionne = None
+    puissance_convertisseur = puissance_max * params['marge_securite']
+    convertisseur_selection = None
     
-    for conv in sorted(PRODUCT_DATABASE['convertisseurs'], key=lambda x: x['puissance']):
-        if conv['puissance'] >= puissance_maximale:
-            convertisseur_selectionne = conv
+    for conv in sorted(PRODUCTS_DB['convertisseurs'], key=lambda x: x['puissance']):
+        if conv['puissance'] >= puissance_convertisseur:
+            convertisseur_selection = conv
             break
     
-    if not convertisseur_selectionne:
-        convertisseur_selectionne = max(PRODUCT_DATABASE['convertisseurs'], key=lambda x: x['puissance'])
+    if not convertisseur_selection:
+        convertisseur_selection = max(PRODUCTS_DB['convertisseurs'], key=lambda x: x['puissance'])
     
     return {
-        'n_panneaux': int(n_panneaux),
-        'batterie': batterie_selectionnee,
+        'panneaux': panneau_selection,
+        'n_panneaux': int(n_panneaux_optimal),
+        'batterie': batterie_selection,
         'n_batteries': int(n_batteries),
-        'convertisseur': convertisseur_selectionne,
+        'convertisseur': convertisseur_selection,
         'energie_totale': energie_totale,
-        'energie_avec_rendement': energie_avec_rendement,
-        'capacite_necessaire_wh': capacite_necessaire_wh
+        'energie_necessaire': energie_necessaire,
+        'capacite_batterie_wh': capacite_necessaire_wh
     }
 
+def generate_pdf_devis(devis_data):
+    """Génère un PDF du devis"""
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; }}
+            .header {{ text-align: center; color: #00843D; border-bottom: 3px solid #FC3D32; padding-bottom: 20px; }}
+            .title {{ font-size: 28px; font-weight: bold; }}
+            .subtitle {{ color: #666; }}
+            .section {{ margin-top: 30px; }}
+            .section-title {{ background-color: #00843D; color: white; padding: 10px; font-weight: bold; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+            th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+            th {{ background-color: #f2f2f2; }}
+            .total {{ font-size: 20px; font-weight: bold; color: #00843D; }}
+            .footer {{ margin-top: 50px; text-align: center; color: #666; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="title">☀️ TSENA SOLAIRE MALAGASY</div>
+            <div class="subtitle">Devis N° {devis_data.get('reference', 'TS-2024-001')}</div>
+            <div>Date: {datetime.now().strftime('%d/%m/%Y')}</div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Configuration du système</div>
+            <table>
+                <tr>
+                    <th>Composant</th>
+                    <th>Description</th>
+                    <th>Quantité</th>
+                    <th>Prix unitaire</th>
+                    <th>Total</th>
+                </tr>
+    """
+    
+    total = 0
+    for item in devis_data.get('items', []):
+        html_content += f"""
+                <tr>
+                    <td>{item['type']}</td>
+                    <td>{item.get('description', '')}</td>
+                    <td>{item['quantite']}</td>
+                    <td>{format_prix(item['prix_unitaire'])}</td>
+                    <td>{format_prix(item['total'])}</td>
+                </tr>
+        """
+        total += item['total']
+    
+    html_content += f"""
+            </table>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">Récapitulatif financier</div>
+            <p>Sous-total: {format_prix(total)}</p>
+            <p>Installation: {format_prix(devis_data.get('installation', 0))}</p>
+            <p>Accessoires: {format_prix(devis_data.get('accessoires', 0))}</p>
+            <p>TVA (20%): {format_prix(devis_data.get('tva', 0))}</p>
+            <p class="total">TOTAL TTC: {format_prix(devis_data.get('total_ttc', 0))}</p>
+        </div>
+        
+        <div class="footer">
+            <p>Tsena Solaire Malagasy - L'énergie verte pour tous</p>
+            <p>Contact: +261 38 81 030 83 | Email: info@tsenasolaire.mg</p>
+            <p>Valable 30 jours à partir de la date d'émission</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    try:
+        # Utiliser pdfkit si disponible, sinon retourner HTML
+        import pdfkit
+        pdf = pdfkit.from_string(html_content, False)
+        return pdf
+    except:
+        # Retourner le HTML si pdfkit n'est pas disponible
+        return html_content.encode()
+
 # Interface principale
-st.markdown('<div class="main-header">☀️ TSENA SOLAIRE MALAGASY ☀️</div>', unsafe_allow_html=True)
-st.markdown("### Plateforme de Devis Automatique - Ingénieur d'Étude Énergie Solaire")
+st.markdown('<h1 class="main-title">☀️ TSENA SOLAIRE MALAGASY</h1>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">Énergie verte pour chaque famille malgache - Miara-miroborobo amin\'ny angovo maitso</p>', unsafe_allow_html=True)
 
-# Sidebar pour la navigation
-with st.sidebar:
-    st.markdown("### 🔧 Navigation")
-    menu = st.radio("", [
-        "📝 Saisie Consommation", 
-        "⚙️ Configuration Système", 
-        "💰 Génération Devis",
-        "📊 Visualisation Complète"
-    ])
-    
-    st.markdown("---")
-    st.markdown("### ⚡ Paramètres Techniques")
-    
-    # Paramètres avancés dans la sidebar
-    with st.expander("Paramètres de calcul"):
-        rendement = st.slider("Rendement système (%)", 70, 95, 85)
-        autonomie = st.slider("Autonomie (jours)", 1, 5, 2)
-        profondeur_decharge = st.selectbox("Profondeur de décharge", 
-                                          [("Lithium LFP", 0.8), 
-                                           ("Gel", 0.7), 
-                                           ("Acide", 0.5)], 
-                                          format_func=lambda x: f"{x[0]} - {int(x[1]*100)}%")[1]
-        heures_ensoleillement = st.slider("Heures d'ensoleillement", 3.0, 8.0, 5.5, 0.5)
-        marge_securite = st.slider("Marge de sécurité", 1.0, 2.0, 1.25, 0.05)
-    
-    st.markdown("---")
-    if st.button("🔄 Réinitialiser tout", type="secondary"):
-        st.session_state.materiels = []
-        st.session_state.selected_components = {}
-        st.session_state.devis_data = {}
-        st.success("Toutes les données ont été réinitialisées!")
-        st.rerun()
+# Bouton WhatsApp flottant
+st.markdown("""
+<div style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;">
+    <a href="https://wa.me/261388103083?text=Bonjour,%20je%20souhaite%20discuter%20de%20mon%20devis%20solaire" target="_blank">
+        <button style="background: #25D366; color: white; border: none; padding: 15px 20px; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(37, 211, 102, 0.4); display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.5em;">💬</span> Discuter avec expert
+        </button>
+    </a>
+</div>
+""", unsafe_allow_html=True)
 
-# Section 1: Saisie de consommation
-if menu == "📝 Saisie Consommation":
-    st.markdown('<div class="section-header">1. Saisie de votre consommation électrique</div>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([3, 2])
+# Onglets principaux
+tabs = st.tabs(["🏠 Accueil", "📊 Calcul Conso", "🛒 Produits", "⚡ Configuration", "💰 Devis"])
+
+# Tab 1: Accueil
+with tabs[0]:
+    col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.markdown("#### 📋 Ajouter un équipement")
-        with st.form("ajout_equipement", clear_on_submit=True):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                nom = st.text_input("Nom de l'équipement*", placeholder="Ex: Réfrigérateur")
-            with c2:
-                puissance = st.number_input("Puissance (W)*", min_value=1, step=1, value=100)
-            with c3:
-                quantite = st.number_input("Quantité*", min_value=1, step=1, value=1)
-            
-            c4, c5 = st.columns(2)
-            with c4:
-                heures_jour = st.number_input("Heures/jour*", min_value=0.0, max_value=24.0, step=0.5, value=8.0)
-            with c5:
-                heures_nuit = st.number_input("Heures/nuit*", min_value=0.0, max_value=24.0, step=0.5, value=8.0)
-            
-            if st.form_submit_button("➕ Ajouter l'équipement", use_container_width=True):
-                if nom:
-                    puissance_totale = puissance * quantite
-                    energie_jour = puissance_totale * heures_jour
-                    energie_nuit = puissance_totale * heures_nuit
-                    
-                    st.session_state.materiels.append({
-                        "Nom": nom,
-                        "Puissance (W)": puissance,
-                        "Quantité": quantite,
-                        "Puissance totale (W)": puissance_totale,
-                        "Heures/jour": heures_jour,
-                        "Energie jour (Wh)": energie_jour,
-                        "Heures/nuit": heures_nuit,
-                        "Energie nuit (Wh)": energie_nuit
-                    })
-                    st.success(f"✅ {nom} ajouté avec succès!")
-                else:
-                    st.error("Veuillez saisir un nom pour l'équipement")
+        st.markdown("""
+        ## 🌿 Bienvenue à Tsena Solaire Malagasy
+        
+        **L'énergie solaire accessible à tous les Malagasy**, où que vous soyez !
+        
+        ### 💚 Pourquoi choisir l'énergie solaire ?
+        
+        ✓ **Indépendance énergétique** - Plus de coupures d'électricité  
+        ✓ **Économies durables** - Réduction de vos factures  
+        ✓ **Respect de l'environnement** - Énergie 100% renouvelable  
+        ✓ **Installation rapide** - Fonctionnel en quelques jours  
+        ✓ **Maintenance simple** - Durabilité garantie  
+        
+        ### 📱 Comment ça marche ?
+        
+        1. **Calculez** votre consommation  
+        2. **Visualisez** nos produits  
+        3. **Configurez** votre système  
+        4. **Recevez** votre devis instantané  
+        5. **Discutez** avec nos experts  
+        
+        """)
+        
+        # Statistiques
+        st.markdown("### 📈 Notre impact")
+        cols_stats = st.columns(4)
+        with cols_stats[0]:
+            st.metric("👥 Familles équipées", "500+")
+        with cols_stats[1]:
+            st.metric("☀️ Panneaux installés", "2,500+")
+        with cols_stats[2]:
+            st.metric("💡 kWh économisés", "1.2M+")
+        with cols_stats[3]:
+            st.metric("🌿 CO₂ évité (tonnes)", "850+")
     
     with col2:
-        st.markdown("#### 📊 Consommation rapide")
+        # Image/Illustration
+        st.markdown("### 🌍 Couverture nationale")
+        regions = {
+            "Analamanga": 35,
+            "Atsinanana": 22,
+            "Vakinankaratra": 18,
+            "Sava": 15,
+            "Boeny": 10
+        }
         
-        with st.expander("💡 Exemples typiques"):
-            exemples = {
-                "Ampoule LED 10W": {"puissance": 10, "heures": 5},
-                "Réfrigérateur 150W": {"puissance": 150, "heures": 24},
-                "TV LED 50W": {"puissance": 50, "heures": 4},
-                "Ordinateur 100W": {"puissance": 100, "heures": 6},
-                "Ventilateur 50W": {"puissance": 50, "heures": 8}
-            }
-            
-            for nom_ex, details in exemples.items():
-                if st.button(f"➕ {nom_ex}", key=f"ex_{nom_ex}"):
-                    st.session_state.materiels.append({
-                        "Nom": nom_ex,
-                        "Puissance (W)": details["puissance"],
-                        "Quantité": 1,
-                        "Puissance totale (W)": details["puissance"],
-                        "Heures/jour": details["heures"],
-                        "Energie jour (Wh)": details["puissance"] * details["heures"],
-                        "Heures/nuit": 0,
-                        "Energie nuit (Wh)": 0
-                    })
-                    st.rerun()
+        fig = px.pie(
+            values=list(regions.values()),
+            names=list(regions.keys()),
+            title="Installations par région",
+            color_discrete_sequence=['#00843D', '#00A86B', '#FC3D32', '#FF6B6B', '#FFD700']
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Témoignage
+        st.markdown("""
+        <div style="background: #f0f8f0; padding: 15px; border-radius: 10px; border-left: 5px solid #00843D; margin-top: 20px;">
+        <i>"Avec Tsena Solaire, ma famille a enfin de l'électricité fiable. Les enfants peuvent étudier le soir et nous regardons la télévision ensemble."</i>
+        <br><br>
+        <b>- Rakoto Jean, Ankazobe</b>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Tab 2: Calcul de consommation
+with tabs[1]:
+    st.markdown('<div class="section-title">📊 Calcul de votre consommation</div>', unsafe_allow_html=True)
+    
+    # Interface de saisie simplifiée
+    with st.expander("➕ Ajouter un équipement", expanded=True):
+        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+        
+        with col1:
+            nom = st.text_input("Équipement", placeholder="Ex: Réfrigérateur, TV, Lampe...")
+        with col2:
+            puissance = st.number_input("Puissance (W)", min_value=1, value=100)
+        with col3:
+            quantite = st.number_input("Qté", min_value=1, value=1)
+        with col4:
+            heures = st.number_input("Heures/jour", min_value=0.0, max_value=24.0, value=8.0)
+        
+        if st.button("Ajouter cet équipement", type="primary"):
+            if nom:
+                energie = puissance * quantite * heures
+                st.session_state.materiels.append({
+                    "Équipement": nom,
+                    "Puissance (W)": puissance,
+                    "Quantité": quantite,
+                    "Heures/jour": heures,
+                    "Énergie (Wh/jour)": energie
+                })
+                st.success(f"✅ {nom} ajouté!")
+                st.rerun()
+    
+    # Équipements prédéfinis
+    st.markdown("### 💡 Équipements courants")
+    equipements_predefinis = {
+        "Ampoule LED 10W": {"puissance": 10, "heures": 5},
+        "Réfrigérateur 150W": {"puissance": 150, "heures": 24},
+        "TV LED 50W": {"puissance": 50, "heures": 4},
+        "Ordinateur 100W": {"puissance": 100, "heures": 6},
+        "Ventilateur 60W": {"puissance": 60, "heures": 8},
+        "Radio 20W": {"puissance": 20, "heures": 3},
+        "Chargeur téléphone 5W": {"puissance": 5, "heures": 2}
+    }
+    
+    cols = st.columns(4)
+    for idx, (nom_eq, details) in enumerate(equipements_predefinis.items()):
+        with cols[idx % 4]:
+            if st.button(f"➕ {nom_eq}", key=f"eq_{idx}"):
+                energie = details["puissance"] * 1 * details["heures"]
+                st.session_state.materiels.append({
+                    "Équipement": nom_eq,
+                    "Puissance (W)": details["puissance"],
+                    "Quantité": 1,
+                    "Heures/jour": details["heures"],
+                    "Énergie (Wh/jour)": energie
+                })
+                st.rerun()
     
     # Affichage des équipements
     if st.session_state.materiels:
-        st.markdown("#### 📈 Synthèse de votre consommation")
+        st.markdown("### 📋 Votre consommation")
         
-        df_materiels = pd.DataFrame(st.session_state.materiels)
+        df_conso = pd.DataFrame(st.session_state.materiels)
+        total_energie = df_conso["Énergie (Wh/jour)"].sum()
+        total_puissance = (df_conso["Puissance (W)"] * df_conso["Quantité"]).sum()
         
-        # Calculs totaux
-        total_puissance = df_materiels["Puissance totale (W)"].sum()
-        total_energie_jour = df_materiels["Energie jour (Wh)"].sum()
-        total_energie_nuit = df_materiels["Energie nuit (Wh)"].sum()
-        puissance_max = df_materiels["Puissance totale (W)"].max()
+        # Graphique
+        fig = px.bar(
+            df_conso,
+            x="Équipement",
+            y="Énergie (Wh/jour)",
+            color="Équipement",
+            title=f"Consommation totale: {total_energie:,.0f} Wh/jour",
+            color_discrete_sequence=px.colors.sequential.Viridis
+        )
+        st.plotly_chart(fig, use_container_width=True)
         
-        col1, col2, col3, col4 = st.columns(4)
+        # Métriques
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Puissance totale", f"{total_puissance:,} W")
+            st.metric("⚡ Énergie quotidienne", f"{total_energie:,.0f} Wh")
         with col2:
-            st.metric("Énergie jour", f"{total_energie_jour:,} Wh")
+            st.metric("🔌 Puissance totale", f"{total_puissance:,.0f} W")
         with col3:
-            st.metric("Énergie nuit", f"{total_energie_nuit:,} Wh")
-        with col4:
-            st.metric("Puissance max", f"{puissance_max:,} W")
+            st.metric("📊 Nombre d'équipements", len(st.session_state.materiels))
         
-        # Tableau détaillé
-        st.markdown("##### Détail des équipements")
-        st.dataframe(df_materiels, use_container_width=True, hide_index=True)
-        
-        # Bouton de suppression
-        if st.button("🗑️ Supprimer tous les équipements", type="secondary"):
+        if st.button("🗑️ Réinitialiser la liste", type="secondary"):
             st.session_state.materiels = []
             st.rerun()
     else:
-        st.info("👋 Commencez par ajouter vos équipements électriques ci-dessus")
+        st.info("👈 Commencez par ajouter vos équipements ci-dessus")
 
-# Section 2: Configuration du système
-elif menu == "⚙️ Configuration Système":
-    st.markdown('<div class="section-header">2. Configuration de votre système solaire</div>', unsafe_allow_html=True)
+# Tab 3: Visualisation des produits
+with tabs[2]:
+    st.markdown('<div class="section-title">🛒 Notre catalogue de produits</div>', unsafe_allow_html=True)
+    
+    # Filtres
+    col_filtre1, col_filtre2 = st.columns(2)
+    with col_filtre1:
+        categorie = st.selectbox(
+            "Catégorie",
+            ["Tous", "Panneaux solaires", "Batteries", "Convertisseurs", "Pompes", "Éclairage", "Régulateurs"]
+        )
+    with col_filtre2:
+        prix_max = st.slider("Prix maximum (Ar)", 50000, 15000000, 5000000, 50000)
+    
+    # Affichage des produits
+    categories_map = {
+        "Panneaux solaires": "panneaux",
+        "Batteries": "batteries",
+        "Convertisseurs": "convertisseurs",
+        "Pompes": "pompes",
+        "Éclairage": "eclairage",
+        "Régulateurs": "regulateurs"
+    }
+    
+    if categorie == "Tous":
+        products_to_show = []
+        for cat in categories_map.values():
+            products_to_show.extend(PRODUCTS_DB[cat])
+    else:
+        products_to_show = PRODUCTS_DB[categories_map[categorie]]
+    
+    # Filtrer par prix
+    products_to_show = [p for p in products_to_show if p['prix'] <= prix_max]
+    
+    # Affichage en grille
+    st.markdown(f"### 📦 {len(products_to_show)} produits disponibles")
+    
+    cols = st.columns(2)
+    for idx, produit in enumerate(products_to_show):
+        with cols[idx % 2]:
+            with st.container():
+                st.markdown(f"""
+                <div class="product-card">
+                    <h4>{produit['nom']}</h4>
+                    <div class="price-tag">{format_prix(produit['prix'])}</div>
+                    <hr>
+                """, unsafe_allow_html=True)
+                
+                # Informations spécifiques par catégorie
+                if 'puissance' in produit:
+                    st.markdown(f"**Puissance:** {produit['puissance']}W")
+                if 'capacite' in produit:
+                    st.markdown(f"**Capacité:** {produit['capacite']}Ah")
+                if 'energie' in produit:
+                    st.markdown(f"**Énergie:** {produit['energie']}kWh")
+                if 'marque' in produit:
+                    st.markdown(f"**Marque:** {produit['marque']}")
+                if 'type' in produit:
+                    st.markdown(f"**Type:** {produit['type']}")
+                if 'efficiency' in produit:
+                    st.markdown(f"**Efficacité:** {produit['efficiency']}")
+                
+                # Bouton d'ajout rapide
+                if st.button(f"➕ Ajouter au devis", key=f"add_{idx}"):
+                    if 'panneaux' in produit.values():
+                        st.session_state.selected_config['panneaux'] = produit
+                    elif 'batterie' in produit.values():
+                        st.session_state.selected_config['batterie'] = produit
+                    elif 'convertisseur' in produit.values():
+                        st.session_state.selected_config['convertisseur'] = produit
+                    st.success(f"{produit['nom']} ajouté à la configuration!")
+                
+                st.markdown("</div>", unsafe_allow_html=True)
+
+# Tab 4: Configuration
+with tabs[3]:
+    st.markdown('<div class="section-title">⚡ Configuration automatique</div>', unsafe_allow_html=True)
     
     if not st.session_state.materiels:
-        st.warning("⚠️ Veuillez d'abord saisir votre consommation dans l'onglet 'Saisie Consommation'")
-    else:
-        # Calcul de la consommation
-        df_materiels = pd.DataFrame(st.session_state.materiels)
-        consommation_jour = df_materiels["Energie jour (Wh)"].sum()
-        consommation_nuit = df_materiels["Energie nuit (Wh)"].sum()
-        puissance_max = df_materiels["Puissance totale (W)"].max()
-        
-        # Paramètres de calcul
-        params = {
-            'rendement': rendement / 100,
-            'autonomie': autonomie,
-            'profondeur_decharge': profondeur_decharge,
-            'heures_ensoleillement': heures_ensoleillement,
-            'marge_securite': marge_securite,
-            'puissance_max': puissance_max
-        }
-        
-        # Onglets pour les différents composants
-        tab1, tab2, tab3, tab4 = st.tabs(["☀️ Panneaux Solaires", "🔋 Batteries", "🔌 Convertisseurs", "⚙️ Autres Équipements"])
-        
-        with tab1:
-            st.markdown("#### Sélectionnez vos panneaux solaires")
-            
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                # Sélection automatique ou manuelle
-                mode_selection = st.radio("Mode de sélection", ["Automatique (recommandé)", "Manuelle"])
-                
-                if mode_selection == "Automatique (recommandé)":
-                    # Calcul automatique
-                    puissance_panneau_auto = st.selectbox(
-                        "Puissance des panneaux disponibles",
-                        [60, 80, 110, 210, 550, 580],
-                        format_func=lambda x: f"{x}W"
-                    )
-                    params['puissance_panneau'] = puissance_panneau_auto
-                    
-                    # Calcul de la configuration
-                    config = calculate_system_configuration(consommation_jour, consommation_nuit, params)
-                    
-                    st.markdown(f"**Configuration recommandée:**")
-                    st.markdown(f"- {config['n_panneaux']} × {puissance_panneau_auto}W")
-                    
-                    # Trouver le prix du panneau sélectionné
-                    for panneau in PRODUCT_DATABASE['panneaux']:
-                        if panneau['puissance'] == puissance_panneau_auto:
-                            prix_panneau = panneau['prix']
-                            st.markdown(f"- Prix unitaire: {format_prix(prix_panneau)}")
-                            st.markdown(f"- Total panneaux: {format_prix(prix_panneau * config['n_panneaux'])}")
-                            break
-                    
-                    # Stocker la sélection
-                    st.session_state.selected_components['panneaux'] = {
-                        'type': f"Panneau {puissance_panneau_auto}W",
-                        'quantite': config['n_panneaux'],
-                        'prix_unitaire': prix_panneau,
-                        'config': config
-                    }
-                
-                else:
-                    # Sélection manuelle
-                    panneaux_options = {f"{p['puissance']}W - {format_prix(p['prix'])}": p for p in PRODUCT_DATABASE['panneaux']}
-                    panneau_selection = st.selectbox("Choisir un panneau", list(panneaux_options.keys()))
-                    panneau_data = panneaux_options[panneau_selection]
-                    
-                    quantite_panneaux = st.number_input("Nombre de panneaux", min_value=1, value=4, step=1)
-                    
-                    st.session_state.selected_components['panneaux'] = {
-                        'type': f"Panneau {panneau_data['puissance']}W",
-                        'quantite': quantite_panneaux,
-                        'prix_unitaire': panneau_data['prix'],
-                        'description': panneau_data['description']
-                    }
-            
-            with col2:
-                st.markdown("#### 📋 Liste des panneaux disponibles")
-                for panneau in PRODUCT_DATABASE['panneaux']:
-                    with st.container():
-                        st.markdown(f"**{panneau['puissance']}W**")
-                        st.markdown(f"<span class='price-tag'>{format_prix(panneau['prix'])}</span>", unsafe_allow_html=True)
-                        st.caption(f"{panneau['description']}")
-                        st.markdown("---")
-        
-        with tab2:
-            st.markdown("#### Sélectionnez vos batteries")
-            
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                if 'config' in st.session_state.selected_components.get('panneaux', {}):
-                    config = st.session_state.selected_components['panneaux']['config']
-                    
-                    st.markdown("**Batterie recommandée:**")
-                    batterie = config['batterie']
-                    
-                    st.markdown(f"**{batterie['nom']}**")
-                    st.markdown(f"- Énergie: {batterie['energie']} kWh")
-                    st.markdown(f"- Tension: {batterie['tension']}V")
-                    st.markdown(f"- Capacité: {batterie['capacite']}Ah")
-                    st.markdown(f"- Quantité recommandée: {config['n_batteries']}")
-                    st.markdown(f"- Prix unitaire: {format_prix(batterie['prix'])}")
-                    
-                    quantite_batteries = st.number_input(
-                        "Nombre de batteries", 
-                        min_value=1, 
-                        value=config['n_batteries'],
-                        step=1,
-                        key="batteries_qty"
-                    )
-                    
-                    st.session_state.selected_components['batteries'] = {
-                        'type': batterie['nom'],
-                        'quantite': quantite_batteries,
-                        'prix_unitaire': batterie['prix'],
-                        'description': batterie['description'],
-                        'energie': batterie['energie']
-                    }
-                else:
-                    st.warning("Veuillez d'abord configurer les panneaux solaires")
-            
-            with col2:
-                st.markdown("#### 🔋 Batteries disponibles")
-                for batterie in PRODUCT_DATABASE['batteries']:
-                    with st.container():
-                        st.markdown(f"**{batterie['nom']}**")
-                        st.markdown(f"<span class='price-tag'>{format_prix(batterie['prix'])}</span>", unsafe_allow_html=True)
-                        st.caption(f"{batterie['energie']} kWh · {batterie['capacite']}Ah")
-                        st.markdown("---")
-        
-        with tab3:
-            st.markdown("#### Sélectionnez votre convertisseur hybride")
-            
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                if 'config' in st.session_state.selected_components.get('panneaux', {}):
-                    config = st.session_state.selected_components['panneaux']['config']
-                    
-                    st.markdown("**Convertisseur recommandé:**")
-                    convertisseur = config['convertisseur']
-                    
-                    st.markdown(f"**{convertisseur['nom']}**")
-                    st.markdown(f"- Puissance: {convertisseur['puissance']:,}W")
-                    st.markdown(f"- Tension: {convertisseur['tension']}V")
-                    st.markdown(f"- Prix: {format_prix(convertisseur['prix'])}")
-                    st.markdown(f"- Marque: {convertisseur['marque']}")
-                    
-                    st.markdown("**Description technique:**")
-                    st.info(convertisseur['description'])
-                    
-                    st.session_state.selected_components['convertisseur'] = {
-                        'type': convertisseur['nom'],
-                        'prix': convertisseur['prix'],
-                        'description': convertisseur['description'],
-                        'puissance': convertisseur['puissance'],
-                        'marque': convertisseur['marque']
-                    }
-                else:
-                    st.warning("Veuillez d'abord configurer les panneaux solaires")
-            
-            with col2:
-                st.markdown("#### 🔌 Convertisseurs disponibles")
-                for conv in PRODUCT_DATABASE['convertisseurs']:
-                    with st.container():
-                        st.markdown(f"**{conv['nom']}**")
-                        st.markdown(f"<span class='price-tag'>{format_prix(conv['prix'])}</span>", unsafe_allow_html=True)
-                        st.caption(f"{conv['puissance']:,}W · {conv['marque']}")
-                        st.markdown("---")
-        
-        with tab4:
-            st.markdown("#### Autres équipements optionnels")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("##### Pompes solaires")
-                pompe_selection = st.selectbox(
-                    "Sélectionnez une pompe",
-                    [""] + [p['nom'] for p in PRODUCT_DATABASE['pompes']],
-                    format_func=lambda x: x if x else "Aucune pompe"
-                )
-                
-                if pompe_selection:
-                    pompe_data = next(p for p in PRODUCT_DATABASE['pompes'] if p['nom'] == pompe_selection)
-                    st.markdown(f"**Prix:** {format_prix(pompe_data['prix'])}")
-                    st.markdown(f"**Puissance:** {pompe_data['puissance']}W")
-                    
-                    if st.button("➕ Ajouter cette pompe"):
-                        st.session_state.selected_components['pompe'] = {
-                            'type': pompe_data['nom'],
-                            'prix': pompe_data['prix'],
-                            'puissance': pompe_data['puissance']
-                        }
-                        st.success("Pompe ajoutée!")
-            
-            with col2:
-                st.markdown("##### Régulateurs de charge")
-                regulateur_selection = st.selectbox(
-                    "Sélectionnez un régulateur",
-                    [""] + [r['nom'] for r in PRODUCT_DATABASE['regulateurs']],
-                    format_func=lambda x: x if x else "Aucun régulateur"
-                )
-                
-                if regulateur_selection:
-                    regulateur_data = next(r for r in PRODUCT_DATABASE['regulateurs'] if r['nom'] == regulateur_selection)
-                    st.markdown(f"**Prix:** {format_prix(regulateur_data['prix'])}")
-                    st.markdown(f"**Type:** {regulateur_data['type']}")
-                    
-                    if st.button("➕ Ajouter ce régulateur"):
-                        st.session_state.selected_components['regulateur'] = {
-                            'type': regulateur_data['nom'],
-                            'prix': regulateur_data['prix']
-                        }
-                        st.success("Régulateur ajouté!")
-
-# Section 3: Génération du devis
-elif menu == "💰 Génération Devis":
-    st.markdown('<div class="section-header">3. Génération du devis détaillé</div>', unsafe_allow_html=True)
-    
-    if not st.session_state.selected_components:
-        st.warning("⚠️ Veuillez d'abord configurer votre système dans l'onglet 'Configuration Système'")
+        st.warning("Veuillez d'abord calculer votre consommation dans l'onglet 'Calcul Conso'")
     else:
         # Calcul des totaux
-        cout_total = 0
-        details_couts = []
+        df_conso = pd.DataFrame(st.session_state.materiels)
+        energie_totale = df_conso["Énergie (Wh/jour)"].sum()
+        puissance_max = (df_conso["Puissance (W)"] * df_conso["Quantité"]).max()
         
-        # Récupération de la configuration
-        if 'panneaux' in st.session_state.selected_components:
-            panneaux = st.session_state.selected_components['panneaux']
-            cout_panneaux = panneaux['quantite'] * panneaux['prix_unitaire']
-            cout_total += cout_panneaux
-            details_couts.append(("☀️ Panneaux solaires", panneaux['quantite'], format_prix(panneaux['prix_unitaire']), format_prix(cout_panneaux)))
+        # Paramètres
+        with st.expander("⚙️ Paramètres techniques", expanded=True):
+            col_param1, col_param2 = st.columns(2)
+            with col_param1:
+                autonomie = st.slider("Autonomie souhaitée (jours)", 1, 5, 2)
+                profondeur_decharge = st.select_slider(
+                    "Profondeur de décharge",
+                    options=[0.5, 0.6, 0.7, 0.8, 0.9],
+                    value=0.8,
+                    format_func=lambda x: f"{int(x*100)}%"
+                )
+            with col_param2:
+                heures_soleil = st.slider("Heures d'ensoleillement/jour", 3.0, 8.0, 5.5, 0.5)
+                rendement = st.slider("Rendement système", 70, 95, 85)
         
-        if 'batteries' in st.session_state.selected_components:
-            batteries = st.session_state.selected_components['batteries']
-            cout_batteries = batteries['quantite'] * batteries['prix_unitaire']
-            cout_total += cout_batteries
-            details_couts.append(("🔋 Batteries", batteries['quantite'], format_prix(batteries['prix_unitaire']), format_prix(cout_batteries)))
-        
-        if 'convertisseur' in st.session_state.selected_components:
-            convertisseur = st.session_state.selected_components['convertisseur']
-            cout_total += convertisseur['prix']
-            details_couts.append(("🔌 Convertisseur hybride", 1, format_prix(convertisseur['prix']), format_prix(convertisseur['prix'])))
-        
-        # Autres équipements
-        autres_couts = 0
-        autres_details = []
-        
-        if 'pompe' in st.session_state.selected_components:
-            pompe = st.session_state.selected_components['pompe']
-            cout_total += pompe['prix']
-            autres_couts += pompe['prix']
-            autres_details.append(f"Pompe solaire: {format_prix(pompe['prix'])}")
-        
-        if 'regulateur' in st.session_state.selected_components:
-            regulateur = st.session_state.selected_components['regulateur']
-            cout_total += regulateur['prix']
-            autres_couts += regulateur['prix']
-            autres_details.append(f"Régulateur: {format_prix(regulateur['prix'])}")
-        
-        # Coûts d'installation et accessoires
-        cout_installation = cout_total * 0.15  # 15% pour installation
-        cout_accessoires = 300000  # Câbles, protections, etc.
-        
-        cout_total += cout_installation + cout_accessoires
-        
-        # TVA
-        tva = cout_total * 0.20
-        total_ttc = cout_total + tva
-        
-        # Affichage du devis
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.markdown('<div class="result-card">', unsafe_allow_html=True)
-            st.markdown("### 📋 DEVIS DÉTAILLÉ")
-            st.markdown(f"**Date:** {datetime.now().strftime('%d/%m/%Y')}")
-            st.markdown(f"**Référence:** TS-{datetime.now().strftime('%Y%m%d')}-001")
-            st.markdown("---")
+        # Bouton de calcul
+        if st.button("🔍 Calculer la configuration optimale", type="primary", use_container_width=True):
+            params = {
+                'rendement': rendement / 100,
+                'autonomie': autonomie,
+                'profondeur_decharge': profondeur_decharge,
+                'heures_soleil': heures_soleil,
+                'marge_securite': 1.25
+            }
             
-            st.markdown("#### Composants principaux")
-            for nom, qte, prix_unitaire, total in details_couts:
-                st.markdown(f"**{nom}**")
-                st.markdown(f"- Quantité: {qte}")
-                st.markdown(f"- Prix unitaire: {prix_unitaire}")
-                st.markdown(f"- Sous-total: **{total}**")
-                st.markdown("")
+            config = calculate_optimal_config(energie_totale, puissance_max, params)
+            st.session_state.selected_config = config
             
-            if autres_details:
-                st.markdown("#### Autres équipements")
-                for detail in autres_details:
-                    st.markdown(f"- {detail}")
-            
-            st.markdown("#### Frais supplémentaires")
-            st.markdown(f"- Installation: {format_prix(cout_installation)}")
-            st.markdown(f"- Accessoires (câbles, protections): {format_prix(cout_accessoires)}")
-            st.markdown("---")
-            
-            st.markdown("#### RÉCAPITULATIF FINANCIER")
-            st.markdown(f"**Total HT:** {format_prix(cout_total - tva)}")
-            st.markdown(f"**TVA (20%):** {format_prix(tva)}")
-            st.markdown(f"### **TOTAL TTC:** {format_prix(total_ttc)}")
-            
-            st.markdown("---")
-            st.markdown(f"**Validité du devis:** {(datetime.now() + timedelta(days=30)).strftime('%d/%m/%Y')}")
-            st.markdown("**Conditions de paiement:** 50% à la commande, 50% à la livraison")
-            st.markdown("**Délai de livraison:** 15 jours ouvrables")
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.success("✅ Configuration optimale calculée!")
         
-        with col2:
-            st.markdown("#### 📊 Synthèse technique")
+        # Affichage de la configuration
+        if st.session_state.selected_config:
+            config = st.session_state.selected_config
             
-            if 'panneaux' in st.session_state.selected_components:
-                config = st.session_state.selected_components['panneaux'].get('config', {})
-                if config:
-                    st.markdown('<div class="metric-box">', unsafe_allow_html=True)
-                    st.markdown('<div class="metric-label">Énergie quotidienne</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="metric-value">{config.get("energie_totale", 0):,.0f} Wh</div>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    st.markdown('<div class="metric-box">', unsafe_allow_html=True)
-                    st.markdown('<div class="metric-label">Nombre de panneaux</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="metric-value">{config.get("n_panneaux", 0)}</div>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    st.markdown('<div class="metric-box">', unsafe_allow_html=True)
-                    st.markdown('<div class="metric-label">Nombre de batteries</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="metric-value">{config.get("n_batteries", 0)}</div>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    if 'convertisseur' in st.session_state.selected_components:
-                        conv = st.session_state.selected_components['convertisseur']
-                        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
-                        st.markdown('<div class="metric-label">Puissance convertisseur</div>', unsafe_allow_html=True)
-                        st.markdown(f'<div class="metric-value">{conv["puissance"]:,} W</div>', unsafe_allow_html=True)
-                        st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown("### 🎯 Configuration recommandée")
             
-            # Bouton de génération
-            if st.button("📄 Générer le PDF du devis", use_container_width=True):
-                # Préparer les données pour l'export
-                devis_complet = {
-                    "date": datetime.now().strftime('%d/%m/%Y'),
-                    "reference": f"TS-{datetime.now().strftime('%Y%m%d')}-001",
-                    "composants": details_couts,
-                    "autres_equipements": autres_details,
-                    "frais": {
-                        "installation": format_prix(cout_installation),
-                        "accessoires": format_prix(cout_accessoires)
+            # Métriques principales
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("☀️ Panneaux", f"{config.get('n_panneaux', 0)} unités")
+            with col2:
+                st.metric("🔋 Batteries", f"{config.get('n_batteries', 0)} unités")
+            with col3:
+                if 'convertisseur' in config:
+                    st.metric("🔌 Convertisseur", f"{config['convertisseur']['puissance']:,}W")
+            with col4:
+                st.metric("💰 Budget estimé", format_prix(
+                    config.get('panneaux', {}).get('prix', 0) * config.get('n_panneaux', 0) +
+                    config.get('batterie', {}).get('prix', 0) * config.get('n_batteries', 0) +
+                    config.get('convertisseur', {}).get('prix', 0)
+                ))
+            
+            # Détails des composants
+            st.markdown("#### 📋 Détail des composants")
+            
+            if 'panneaux' in config:
+                panneau = config['panneaux']
+                col_p1, col_p2, col_p3 = st.columns([2, 1, 1])
+                with col_p1:
+                    st.markdown(f"**{panneau['puissance']}W {panneau['type']}**")
+                with col_p2:
+                    st.markdown(f"**Quantité:** {config['n_panneaux']}")
+                with col_p3:
+                    st.markdown(f"**Prix:** {format_prix(panneau['prix'])}")
+            
+            if 'batterie' in config:
+                batterie = config['batterie']
+                col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
+                with col_b1:
+                    st.markdown(f"**{batterie['nom']}**")
+                with col_b2:
+                    st.markdown(f"**Quantité:** {config['n_batteries']}")
+                with col_b3:
+                    st.markdown(f"**Prix:** {format_prix(batterie['prix'])}")
+            
+            if 'convertisseur' in config:
+                convertisseur = config['convertisseur']
+                col_c1, col_c2 = st.columns([2, 1])
+                with col_c1:
+                    st.markdown(f"**{convertisseur['nom']}**")
+                with col_c2:
+                    st.markdown(f"**Prix:** {format_prix(convertisseur['prix'])}")
+            
+            # Graphique de répartition
+            st.markdown("#### 📊 Répartition du coût")
+            
+            if all(k in config for k in ['panneaux', 'batterie', 'convertisseur']):
+                cout_panneaux = config['panneaux']['prix'] * config['n_panneaux']
+                cout_batteries = config['batterie']['prix'] * config['n_batteries']
+                cout_convertisseur = config['convertisseur']['prix']
+                
+                fig = go.Figure(data=[go.Pie(
+                    labels=['Panneaux', 'Batteries', 'Convertisseur'],
+                    values=[cout_panneaux, cout_batteries, cout_convertisseur],
+                    hole=.3,
+                    marker_colors=['#00843D', '#FC3D32', '#FFD700']
+                )])
+                fig.update_layout(title="Répartition des coûts")
+                st.plotly_chart(fig, use_container_width=True)
+
+# Tab 5: Devis
+with tabs[4]:
+    st.markdown('<div class="section-title">💰 Votre devis détaillé</div>', unsafe_allow_html=True)
+    
+    if not st.session_state.selected_config:
+        st.info("Veuillez d'abord configurer votre système dans l'onglet 'Configuration'")
+    else:
+        config = st.session_state.selected_config
+        
+        # Calcul du devis
+        if all(k in config for k in ['panneaux', 'batterie', 'convertisseur']):
+            # Coûts directs
+            cout_panneaux = config['panneaux']['prix'] * config['n_panneaux']
+            cout_batteries = config['batterie']['prix'] * config['n_batteries']
+            cout_convertisseur = config['convertisseur']['prix']
+            
+            # Frais additionnels
+            cout_installation = (cout_panneaux + cout_batteries + cout_convertisseur) * 0.15
+            cout_accessoires = 250000
+            cout_transport = 150000
+            
+            sous_total = cout_panneaux + cout_batteries + cout_convertisseur + cout_installation + cout_accessoires + cout_transport
+            tva = sous_total * 0.20
+            total_ttc = sous_total + tva
+            
+            # Stocker le devis
+            devis_data = {
+                'reference': f"TS-{datetime.now().strftime('%Y%m%d')}-{len(st.session_state.materiels)}",
+                'date': datetime.now().strftime('%d/%m/%Y'),
+                'items': [
+                    {
+                        'type': 'Panneaux solaires',
+                        'description': f"{config['panneaux']['puissance']}W {config['panneaux']['type']}",
+                        'quantite': config['n_panneaux'],
+                        'prix_unitaire': config['panneaux']['prix'],
+                        'total': cout_panneaux
                     },
-                    "totaux": {
-                        "ht": format_prix(cout_total - tva),
-                        "tva": format_prix(tva),
-                        "ttc": format_prix(total_ttc)
+                    {
+                        'type': 'Batteries',
+                        'description': config['batterie']['nom'],
+                        'quantite': config['n_batteries'],
+                        'prix_unitaire': config['batterie']['prix'],
+                        'total': cout_batteries
+                    },
+                    {
+                        'type': 'Convertisseur',
+                        'description': config['convertisseur']['nom'],
+                        'quantite': 1,
+                        'prix_unitaire': config['convertisseur']['prix'],
+                        'total': cout_convertisseur
                     }
-                }
+                ],
+                'installation': cout_installation,
+                'accessoires': cout_accessoires,
+                'transport': cout_transport,
+                'sous_total': sous_total,
+                'tva': tva,
+                'total_ttc': total_ttc
+            }
+            
+            st.session_state.devis = devis_data
+            
+            # Affichage du devis
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown("### 📄 Devis détaillé")
                 
-                # Convertir en JSON pour l'export
-                devis_json = json.dumps(devis_complet, indent=2, ensure_ascii=False)
+                # Table des composants
+                st.markdown("#### Composants du système")
+                df_items = pd.DataFrame(devis_data['items'])
+                df_items['Prix unitaire'] = df_items['prix_unitaire'].apply(format_prix)
+                df_items['Total'] = df_items['total'].apply(format_prix)
+                st.dataframe(df_items[['type', 'description', 'quantite', 'Prix unitaire', 'Total']], 
+                           use_container_width=True, hide_index=True)
                 
-                st.download_button(
-                    label="⬇️ Télécharger le devis (JSON)",
-                    data=devis_json,
-                    file_name=f"devis_tsena_solaire_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-                    mime="application/json",
-                    use_container_width=True
+                # Frais additionnels
+                st.markdown("#### Frais additionnels")
+                col_f1, col_f2, col_f3 = st.columns(3)
+                with col_f1:
+                    st.metric("Installation", format_prix(cout_installation))
+                with col_f2:
+                    st.metric("Accessoires", format_prix(cout_accessoires))
+                with col_f3:
+                    st.metric("Transport", format_prix(cout_transport))
+                
+                # Récapitulatif financier
+                st.markdown("#### 💰 Récapitulatif")
+                
+                fig = go.Figure(go.Waterfall(
+                    name="Devis",
+                    orientation="v",
+                    measure=["relative", "relative", "relative", "relative", "relative", "relative", "total"],
+                    x=["Panneaux", "Batteries", "Convertisseur", "Installation", "Accessoires", "Transport", "Total HT"],
+                    textposition="outside",
+                    text=[format_prix(cout_panneaux), format_prix(cout_batteries), 
+                          format_prix(cout_convertisseur), format_prix(cout_installation),
+                          format_prix(cout_accessoires), format_prix(cout_transport), ""],
+                    y=[cout_panneaux, cout_batteries, cout_convertisseur, 
+                       cout_installation, cout_accessoires, cout_transport, total_ttc],
+                    connector={"line": {"color": "rgb(63, 63, 63)"}},
+                ))
+                
+                fig.update_layout(
+                    title="Évolution du coût total",
+                    showlegend=False,
+                    height=400
                 )
                 
-                st.success("✅ Devis généré avec succès! Vous pouvez le télécharger ci-dessus.")
-
-# Section 4: Visualisation complète
-elif menu == "📊 Visualisation Complète":
-    st.markdown('<div class="section-header">4. Visualisation complète du projet</div>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([3, 2])
-    
-    with col1:
-        st.markdown("#### 📈 Vue d'ensemble du système")
-        
-        if not st.session_state.materiels and not st.session_state.selected_components:
-            st.info("ℹ️ Aucune donnée à afficher. Commencez par configurer votre système.")
-        else:
-            # Affichage de la consommation
-            if st.session_state.materiels:
-                st.markdown("##### Consommation électrique")
-                df_materiels = pd.DataFrame(st.session_state.materiels)
-                
-                # Graphique de consommation
-                import plotly.express as px
-                
-                fig = px.bar(df_materiels, 
-                           x='Nom', 
-                           y=['Energie jour (Wh)', 'Energie nuit (Wh)'],
-                           title='Consommation par équipement',
-                           barmode='group',
-                           labels={'value': 'Énergie (Wh)', 'variable': 'Période'})
                 st.plotly_chart(fig, use_container_width=True)
             
-            # Affichage de la configuration
-            if st.session_state.selected_components:
-                st.markdown("##### Configuration du système")
+            with col2:
+                st.markdown("### 🧾 Résumé")
                 
-                config_data = []
-                if 'panneaux' in st.session_state.selected_components:
-                    p = st.session_state.selected_components['panneaux']
-                    config_data.append({"Composant": "Panneaux", "Détail": f"{p['quantite']} × {p['type']}"})
+                # Cartes de synthèse
+                st.markdown("""
+                <div class="metric-card">
+                    <div class="metric-label">Total HT</div>
+                    <div class="metric-value">{}</div>
+                </div>
+                """.format(format_prix(sous_total)), unsafe_allow_html=True)
                 
-                if 'batteries' in st.session_state.selected_components:
-                    b = st.session_state.selected_components['batteries']
-                    config_data.append({"Composant": "Batteries", "Détail": f"{b['quantite']} × {b['type']}"})
+                st.markdown("""
+                <div class="metric-card">
+                    <div class="metric-label">TVA (20%)</div>
+                    <div class="metric-value">{}</div>
+                </div>
+                """.format(format_prix(tva)), unsafe_allow_html=True)
                 
-                if 'convertisseur' in st.session_state.selected_components:
-                    c = st.session_state.selected_components['convertisseur']
-                    config_data.append({"Composant": "Convertisseur", "Détail": c['type']})
+                st.markdown("""
+                <div class="metric-card" style="border-color: #00843D;">
+                    <div class="metric-label" style="color: #00843D;">Total TTC</div>
+                    <div class="metric-value" style="color: #00843D;">{}</div>
+                </div>
+                """.format(format_prix(total_ttc)), unsafe_allow_html=True)
                 
-                if config_data:
-                    df_config = pd.DataFrame(config_data)
-                    st.dataframe(df_config, use_container_width=True, hide_index=True)
-    
-    with col2:
-        st.markdown("#### 📋 Résumé technique")
-        
-        if st.session_state.selected_components:
-            # Calcul des indicateurs techniques
-            indicateurs = []
-            
-            if 'panneaux' in st.session_state.selected_components:
-                p = st.session_state.selected_components['panneaux']
-                if 'config' in p:
-                    config = p['config']
-                    indicateurs.append(("☀️ Production estimée", f"{config.get('energie_avec_rendement', 0):,.0f} Wh/jour"))
-                    indicateurs.append(("🔋 Autonomie", f"{autonomie} jours"))
-                    indicateurs.append(("⚡ Rendement système", f"{rendement}%"))
-            
-            if 'batteries' in st.session_state.selected_components:
-                b = st.session_state.selected_components['batteries']
-                if 'energie' in b:
-                    energie_totale_batteries = b['quantite'] * b['energie']
-                    indicateurs.append(("🔋 Capacité totale", f"{energie_totale_batteries:,.1f} kWh"))
-            
-            for label, valeur in indicateurs:
-                st.markdown(f"**{label}:** {valeur}")
-            
-            # Avantages du système
-            st.markdown("##### ✅ Avantages du système")
-            avantages = [
-                "✓ Énergie renouvelable et gratuite",
-                "✓ Indépendance énergétique",
-                "✓ Réduction des factures d'électricité",
-                "✓ Faible entretien",
-                "✓ Durée de vie longue",
-                "✓ Respect de l'environnement"
-            ]
-            
-            for avantage in avantages:
-                st.markdown(f"<div style='color: var(--accent);'>{avantage}</div>", unsafe_allow_html=True)
-        
-        # Bouton pour tout réinitialiser
-        st.markdown("---")
-        if st.button("🔄 Nouveau projet", use_container_width=True, type="secondary"):
-            st.session_state.materiels = []
-            st.session_state.selected_components = {}
-            st.session_state.devis_data = {}
-            st.success("Nouveau projet créé! Vous pouvez recommencer la configuration.")
-            st.rerun()
+                # Boutons d'action
+                st.markdown("---")
+                
+                # WhatsApp
+                whatsapp_msg = f"Bonjour, je souhaite discuter du devis {devis_data['reference']} pour un système solaire."
+                whatsapp_url = f"https://wa.me/261388103083?text={whatsapp_msg}"
+                
+                st.markdown(f"""
+                <a href="{whatsapp_url}" target="_blank">
+                    <button class="whatsapp-btn" style="width: 100%; margin-bottom: 10px;">
+                        💬 Discuter avec expert
+                    </button>
+                </a>
+                """, unsafe_allow_html=True)
+                
+                # Export PDF
+                if st.button("📄 Exporter le devis (PDF)", use_container_width=True):
+                    pdf_content = generate_pdf_devis(devis_data)
+                    
+                    if isinstance(pdf_content, bytes):
+                        b64 = base64.b64encode(pdf_content).decode()
+                        href = f'<a href="data:application/pdf;base64,{b64}" download="devis_tsena_solaire_{devis_data["reference"]}.pdf">📥 Télécharger le PDF</a>'
+                    else:
+                        href = f'<a href="data:text/html;base64,{base64.b64encode(pdf_content).decode()}" download="devis_tsena_solaire_{devis_data["reference"]}.html">📥 Télécharger le HTML</a>'
+                    
+                    st.markdown(href, unsafe_allow_html=True)
+                    st.success("Devis généré avec succès!")
+                
+                # Statistiques d'économie
+                st.markdown("---")
+                st.markdown("#### 💡 Économies estimées")
+                
+                economie_mensuelle = (config.get('energie_totale', 0) / 1000) * 350 * 30  # Estimation 350Ar/kWh
+                st.metric("Économie mensuelle", f"{economie_mensuelle:,.0f} Ar")
+                st.metric("Retour sur investissement", "3-4 ans")
+                st.metric("Garantie système", "5 ans")
 
-# Pied de page
+# Footer
 st.markdown("""
 <div class="footer">
-    <p><strong>☀️ TSENA SOLAIRE MALAGASY</strong> · Votre expert en énergie solaire à Madagascar</p>
-    <p>📞 Contact: +261 34 00 000 00 | ✉️ contact@tsenasolaire.mg | 🌐 www.tsenasolaire.mg</p>
-    <p>📍 Antananarivo, Madagascar · Développé par l'équipe IT Tsena Solaire</p>
-    <p style="font-size: 0.8em; margin-top: 10px;">© 2024 Tsena Solaire Malagasy · Tous droits réservés</p>
+    <h3>☀️ Tsena Solaire Malagasy</h3>
+    <p>L'énergie verte pour chaque famille, partout à Madagascar</p>
+    <p>📞 +261 38 81 030 83 | 📍 Antananarivo, Madagascar</p>
+    <p>🌐 www.tsenasolaire.mg | ✉️ contact@tsenasolaire.mg</p>
+    <p style="font-size: 0.8em; margin-top: 15px;">
+        <span class="eco-badge">♻️ Énergie propre</span>
+        <span class="eco-badge">🇲🇬 Made for Madagascar</span>
+        <span class="eco-badge">💚 Développement durable</span>
+    </p>
 </div>
+""", unsafe_allow_html=True)
+
+# Message pour mobile
+st.markdown("""
+<script>
+    // Détection mobile
+    if(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        // Application optimisée pour mobile
+    }
+</script>
 """, unsafe_allow_html=True)
